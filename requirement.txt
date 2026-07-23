@@ -1,2 +1,3 @@
 jobspy
 notion-client
+pandas
