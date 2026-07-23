@@ -28,8 +28,8 @@ def fetch_existing_urls():
         kwargs = {"data_source_id": DATABASE_ID, "page_size": 100}
         if start_cursor:
             kwargs["start_cursor"] = start_cursor
-            
-        # Updated method for notion-client v2.x+
+
+        # Updated method for newer notion-client SDKs
         response = notion.data_sources.query(**kwargs)
         
         for result in response.get("results", []):
