@@ -25,13 +25,15 @@ def fetch_existing_urls():
     start_cursor = None
 
     while has_more:
-        kwargs = {"database_id": DATABASE_ID, "page_size": 100}
+        kwargs = {"data_source_id": DATABASE_ID, "page_size": 100}
         if start_cursor:
             kwargs["start_cursor"] = start_cursor
-        response = notion.databases.query(**kwargs)
+            
+        # Updated method for notion-client v2.x+
+        response = notion.data_sources.query(**kwargs)
         
         for result in response.get("results", []):
-            url_prop = result["properties"].get("Apply Link", {}).get("url")
+            url_prop = result.get("properties", {}).get("Apply Link", {}).get("url")
             if url_prop:
                 existing_urls.add(url_prop)
                 
