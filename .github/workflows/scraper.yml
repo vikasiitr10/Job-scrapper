@@ -1,5 +1,4 @@
 name: Job Scraper Sync
-
 on:
   schedule:
     # Runs every 2 hours
@@ -21,7 +20,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install python-jobspy notion-client pandas
+          pip install python-jobspy notion-client==3.1.0 pandas
 
       - name: Run Job Scraper
         env:
