@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 from jobspy import scrape_jobs
 from notion_client import Client
@@ -59,6 +60,44 @@ def fetch_existing_urls(data_source_id: str):
     return existing_urls
 
 
+# Keywords that clearly signal a senior-level role, regardless of years mentioned.
+# Word-boundary matched to avoid false positives (e.g. "Associate Product Manager"
+# should NOT match on "manager" alone).
+SENIOR_KEYWORDS = [
+    r"senior", r"sr\.", r"\bsr\b", r"lead", r"principal", r"staff\s+engineer",
+    r"director", r"head\s+of", r"vp\b", r"vice\s+president", r"architect",
+]
+
+# Matches patterns like "3-5 years", "5+ years", "at least 4 years", "3 to 6 years"
+YEARS_PATTERN = re.compile(
+    r"(\d{1,2})\s*(?:\+|-|to)\s*(\d{1,2})?\s*\+?\s*years?", re.IGNORECASE
+)
+
+
+def assess_experience(title: str, description: str):
+    """
+    Returns (should_skip: bool, exp_label: str).
+    - Skips clearly senior roles (by keyword or explicit high year count).
+    - Otherwise extracts a real year range if mentioned.
+    - Falls back to the entry-level default if nothing specific is found.
+    """
+    text = f"{title} {description}".lower()
+
+    for kw in SENIOR_KEYWORDS:
+        if re.search(kw, text, re.IGNORECASE):
+            return True, "Senior (skipped)"
+
+    match = YEARS_PATTERN.search(text)
+    if match:
+        low = int(match.group(1))
+        high = int(match.group(2)) if match.group(2) else low
+        if low >= 4:
+            return True, f"{low}-{high} Years (skipped)"
+        return False, f"{low}-{high} Years"
+
+    return False, "0-2 Years / Entry Level"
+
+
 def push_to_notion(job, existing_urls, database_id):
     job_url = job.get("job_url")
     if not job_url or job_url in existing_urls:
@@ -71,8 +110,10 @@ def push_to_notion(job, existing_urls, database_id):
     date_posted = str(date_posted_raw) if date_posted_raw not in (None, "", "nan") else datetime.now().strftime("%Y-%m-%d")
     site = str(job.get("site") or "Other").title()
 
-    # Heuristic for experience requirements
-    exp_text = "0-2 Years / Entry Level"
+    should_skip, exp_text = assess_experience(title, description)
+    if should_skip:
+        print(f"Skipped (experience): {title} at {company} [{exp_text}]")
+        return False
 
     try:
         notion.pages.create(
@@ -83,7 +124,7 @@ def push_to_notion(job, existing_urls, database_id):
                 "Apply Link": {"url": job_url},
                 "Experience": {"rich_text": [{"text": {"content": exp_text}}]},
                 "Post Date": {"date": {"start": date_posted}},
-                "Source": {"select": {"name": site}},
+                "Source": {"multi_select": [{"name": site}]},
                 "Job Description": {"rich_text": [{"text": {"content": description}}]},
             },
         )
@@ -110,8 +151,8 @@ def main():
             jobs = scrape_jobs(
                 site_name=["linkedin", "naukri", "indeed", "google"],
                 search_term=f"{role} junior entry level",
-                results_wanted=15,
-                hours_old=3,
+                results_wanted=40,
+                hours_old=24,
                 country_indeed="India",  # Change or remove depending on target market
             )
             if jobs is None or jobs.empty:
