@@ -98,10 +98,33 @@ def assess_experience(title: str, description: str):
     return False, "0-2 Years / Entry Level"
 
 
+def is_india_or_remote(job) -> bool:
+    """
+    Keep jobs that are either based in India or explicitly remote.
+    Acts as a safety net since site-level location search isn't always reliable
+    (LinkedIn/Google in particular can surface out-of-region results).
+    """
+    location = str(job.get("location") or "").lower()
+    is_remote = bool(job.get("is_remote"))
+
+    if is_remote:
+        return True
+    if "india" in location:
+        return True
+    # Some listings just say "Remote" in the location field itself
+    if "remote" in location:
+        return True
+    return False
+
+
 def push_to_notion(job, existing_urls, database_id):
     job_url = job.get("job_url")
     if not job_url or job_url in existing_urls:
         return False  # Skip duplicates
+
+    if not is_india_or_remote(job):
+        print(f"Skipped (location): {job.get('title')} — {job.get('location')}")
+        return False
 
     title = str(job.get("title") or "Untitled")
     company = str(job.get("company") or "N/A")
@@ -151,6 +174,7 @@ def main():
             jobs = scrape_jobs(
                 site_name=["linkedin", "naukri", "indeed", "google"],
                 search_term=f"{role} junior entry level",
+                location="India",
                 results_wanted=40,
                 hours_old=24,
                 country_indeed="India",  # Change or remove depending on target market
